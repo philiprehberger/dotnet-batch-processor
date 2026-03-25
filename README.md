@@ -14,10 +14,11 @@ dotnet add package Philiprehberger.BatchProcessor
 
 ## Usage
 
+### Basic Batch Processing
+
 ```csharp
 using Philiprehberger.BatchProcessor;
 
-// Basic batch processing
 var items = Enumerable.Range(1, 1000).ToList();
 
 var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
@@ -26,23 +27,46 @@ var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
 });
 
 Console.WriteLine($"Processed {result.SuccessCount} items in {result.TotalDuration.TotalSeconds}s");
+```
 
-// With progress reporting and parallel execution
-var result2 = await BatchProcessor.Process(items, batchSize: 50, async batch =>
+### Progress Reporting
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+var items = Enumerable.Range(1, 500).ToList();
+
+var result = await BatchProcessor.Process(items, batchSize: 50, async batch =>
+{
+    await SendToApiAsync(batch);
+}, new BatchOptions
+{
+    OnProgress = progress =>
+    {
+        Console.WriteLine($"Progress: {progress.Percent:F1}% ({progress.ProcessedCount}/{progress.TotalCount})");
+    }
+});
+```
+
+### Parallel Execution with Error Handling
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+var items = Enumerable.Range(1, 1000).ToList();
+
+var result = await BatchProcessor.Process(items, batchSize: 50, async batch =>
 {
     await SendToApiAsync(batch);
 }, new BatchOptions
 {
     MaxDegreeOfParallelism = 4,
-    OnProgress = progress =>
-    {
-        Console.WriteLine($"Progress: {progress.Percent:F1}% ({progress.ProcessedCount}/{progress.TotalCount})");
-    },
     OnBatchError = BatchErrorHandling.Skip,
     RetryCount = 2
 });
 
-Console.WriteLine($"Success: {result2.SuccessCount}, Failures: {result2.FailureCount}");
+Console.WriteLine($"Success: {result.SuccessCount}, Failures: {result.FailureCount}");
+Console.WriteLine($"Errors: {result.Errors.Count}");
 ```
 
 ## API
