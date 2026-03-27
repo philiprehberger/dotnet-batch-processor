@@ -3,6 +3,7 @@
 [![CI](https://github.com/philiprehberger/dotnet-batch-processor/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/dotnet-batch-processor/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.BatchProcessor.svg)](https://www.nuget.org/packages/Philiprehberger.BatchProcessor)
 [![License](https://img.shields.io/github/license/philiprehberger/dotnet-batch-processor)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
 Process large collections in configurable batches with progress reporting, error handling, and async execution.
 
@@ -120,4 +121,4 @@ dotnet build src/Philiprehberger.BatchProcessor.csproj --configuration Release
 
 ## License
 
-MIT
+[MIT](LICENSE)
