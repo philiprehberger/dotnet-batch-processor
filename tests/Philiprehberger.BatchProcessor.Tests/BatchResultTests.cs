@@ -47,5 +47,7 @@ public class BatchResultTests
         Assert.Null(options.OnProgress);
         Assert.Equal(BatchErrorHandling.Abort, options.OnBatchError);
         Assert.Equal(0, options.RetryCount);
+        Assert.Null(options.BatchTimeout);
+        Assert.Null(options.OnBatchCompleted);
     }
 }
