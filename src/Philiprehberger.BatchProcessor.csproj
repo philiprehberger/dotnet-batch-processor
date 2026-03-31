@@ -10,7 +10,7 @@
     <RootNamespace>Philiprehberger.BatchProcessor</RootNamespace>
 
     <PackageId>Philiprehberger.BatchProcessor</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Philip Rehberger</Authors>
     <Description>Process large collections in configurable batches with progress reporting, error handling, and async execution.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
