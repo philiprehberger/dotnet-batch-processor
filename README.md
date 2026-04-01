@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Philiprehberger.BatchProcessor.svg)](https://www.nuget.org/packages/Philiprehberger.BatchProcessor)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/dotnet-batch-processor)](https://github.com/philiprehberger/dotnet-batch-processor/commits/main)
 
-Process large collections in configurable batches with progress reporting, error handling, and async execution.
+Process large collections in configurable batches with progress reporting, error handling, async execution, streaming IAsyncEnumerable support, checkpoint/resume, and adaptive batch sizing.
 
 ## Installation
 
@@ -137,6 +137,82 @@ var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
 }, cancellationToken: cts.Token);
 ```
 
+### Streaming with IAsyncEnumerable
+
+Process items from an async stream without materializing the full collection:
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+async IAsyncEnumerable<Order> GetOrdersAsync()
+{
+    await foreach (var order in database.StreamOrdersAsync())
+    {
+        yield return order;
+    }
+}
+
+var result = await BatchProcessor.ProcessStreamAsync(GetOrdersAsync(), batchSize: 50, async batch =>
+{
+    await SendToWarehouseAsync(batch);
+}, new BatchOptions
+{
+    MaxDegreeOfParallelism = 3,
+    OnBatchError = BatchErrorHandling.Skip
+});
+
+Console.WriteLine($"Streamed {result.SuccessCount} orders, {result.FailureCount} failed");
+```
+
+### Checkpoint and Resume
+
+Persist progress after each batch and resume from where processing left off:
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+var lastCheckpoint = LoadCheckpointFromDisk(); // e.g., returns 5
+
+var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
+{
+    await ProcessBatchAsync(batch);
+}, new BatchOptions
+{
+    ResumeFromBatch = lastCheckpoint + 1,
+    CheckpointCallback = batchIndex =>
+    {
+        SaveCheckpointToDisk(batchIndex);
+    }
+});
+```
+
+### Adaptive Batch Sizing
+
+Automatically adjust batch sizes based on measured throughput:
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+var items = Enumerable.Range(1, 10000).ToList();
+
+var result = await BatchProcessor.Process(items, batchSize: 50, async batch =>
+{
+    await SendToApiAsync(batch);
+}, new BatchOptions
+{
+    AdaptiveBatching = new AdaptiveBatchOptions
+    {
+        MinBatchSize = 10,
+        MaxBatchSize = 500,
+        TargetThroughput = 200 // items per second
+    },
+    OnBatchCompleted = e =>
+    {
+        Console.WriteLine($"Batch {e.BatchIndex}: {e.ItemCount} items in {e.Elapsed.TotalMilliseconds}ms");
+    }
+});
+```
+
 ## API
 
 ### BatchProcessor
@@ -145,6 +221,7 @@ var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
 |--------|-------------|
 | `Process<T>(items, batchSize, processor, options?, cancellationToken?)` | Process items in batches asynchronously. Returns a `BatchResult`. |
 | `ProcessAsync<T>(items, batchSize, processor, options?, cancellationToken?)` | Process items in batches with per-item error tracking. Returns a `BatchResult<T>`. |
+| `ProcessStreamAsync<T>(source, batchSize, processor, options?, cancellationToken?)` | Process items from an `IAsyncEnumerable<T>` source in batches. Returns a `BatchResult`. |
 
 ### BatchOptions
 
@@ -156,6 +233,17 @@ var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
 | `RetryCount` | `int` | `0` | Number of times to retry a failed batch. |
 | `BatchTimeout` | `TimeSpan?` | `null` | Timeout per batch. Throws `TimeoutException` if exceeded. |
 | `OnBatchCompleted` | `Action<BatchCompletedEventArgs>?` | `null` | Callback with batch index, item count, elapsed time, and success/failure counts. |
+| `CheckpointCallback` | `Action<int>?` | `null` | Callback invoked after each batch with the zero-based batch index for checkpoint/resume. |
+| `ResumeFromBatch` | `int` | `0` | Zero-based batch index to resume from. Earlier batches are skipped. |
+| `AdaptiveBatching` | `AdaptiveBatchOptions?` | `null` | Adaptive batch sizing configuration. |
+
+### AdaptiveBatchOptions
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `MinBatchSize` | `int` | `1` | Minimum batch size for adaptive sizing. |
+| `MaxBatchSize` | `int` | `1000` | Maximum batch size for adaptive sizing. |
+| `TargetThroughput` | `double` | `100.0` | Target throughput in items per second. |
 
 ### BatchProgress
 

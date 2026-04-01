@@ -10,12 +10,12 @@
     <RootNamespace>Philiprehberger.BatchProcessor</RootNamespace>
 
     <PackageId>Philiprehberger.BatchProcessor</PackageId>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <Authors>Philip Rehberger</Authors>
-    <Description>Process large collections in configurable batches with progress reporting, error handling, and async execution.</Description>
+    <Description>Process large collections in configurable batches with progress reporting, error handling, async execution, streaming IAsyncEnumerable support, checkpoint/resume, and adaptive batch sizing.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>batch;bulk;processing;parallel;async</PackageTags>
+    <PackageTags>batch;bulk;processing;parallel;async;streaming;checkpoint;adaptive</PackageTags>
     <RepositoryUrl>https://github.com/philiprehberger/dotnet-batch-processor</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>

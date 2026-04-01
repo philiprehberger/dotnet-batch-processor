@@ -22,10 +22,26 @@ namespace Philiprehberger.BatchProcessor;
 /// Optional callback invoked after each batch completes with batch-level summary information including
 /// index, item count, elapsed time, and success/failure counts.
 /// </param>
+/// <param name="CheckpointCallback">
+/// Optional callback invoked after each batch completes with the zero-based batch index.
+/// Use this to persist progress for checkpoint/resume workflows.
+/// </param>
+/// <param name="ResumeFromBatch">
+/// The zero-based batch index to resume from. Batches before this index will be skipped.
+/// Defaults to 0 (process from the beginning).
+/// </param>
+/// <param name="AdaptiveBatching">
+/// Optional adaptive batch sizing configuration. When provided, the batch size will be
+/// automatically adjusted based on measured throughput. The initial batch size passed to
+/// the processing method is used as the starting size.
+/// </param>
 public sealed record BatchOptions(
     int MaxDegreeOfParallelism = 1,
     Action<BatchProgress>? OnProgress = null,
     BatchErrorHandling OnBatchError = BatchErrorHandling.Abort,
     int RetryCount = 0,
     TimeSpan? BatchTimeout = null,
-    Action<BatchCompletedEventArgs>? OnBatchCompleted = null);
+    Action<BatchCompletedEventArgs>? OnBatchCompleted = null,
+    Action<int>? CheckpointCallback = null,
+    int ResumeFromBatch = 0,
+    AdaptiveBatchOptions? AdaptiveBatching = null);

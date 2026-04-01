@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (2026-03-31)
+
+- Add `ProcessStreamAsync` method for processing `IAsyncEnumerable<T>` sources without materializing the full collection
+- Add checkpoint/resume support via `CheckpointCallback` and `ResumeFromBatch` options
+- Add adaptive batch sizing via `AdaptiveBatchOptions` with `MinBatchSize`, `MaxBatchSize`, and `TargetThroughput`
+- Add tests for streaming, checkpoint/resume, and adaptive batch sizing
+
 ## 0.2.1 (2026-03-31)
 
 - Standardize README to 3-badge format with emoji Support section
