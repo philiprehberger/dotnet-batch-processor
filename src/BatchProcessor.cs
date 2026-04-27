@@ -40,6 +40,11 @@ public static class BatchProcessor
         }
 
         options ??= new BatchOptions();
+
+        if (options.ResumeFromBatch < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.ResumeFromBatch, "ResumeFromBatch must be greater than or equal to 0.");
+        }
         var stopwatch = Stopwatch.StartNew();
 
         var materializedItems = items as IReadOnlyList<T> ?? items.ToList();
@@ -209,6 +214,11 @@ public static class BatchProcessor
         }
 
         options ??= new BatchOptions();
+
+        if (options.ResumeFromBatch < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.ResumeFromBatch, "ResumeFromBatch must be greater than or equal to 0.");
+        }
         var stopwatch = Stopwatch.StartNew();
 
         var materializedItems = items as IReadOnlyList<T> ?? items.ToList();
@@ -382,6 +392,11 @@ public static class BatchProcessor
         }
 
         options ??= new BatchOptions();
+
+        if (options.ResumeFromBatch < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.ResumeFromBatch, "ResumeFromBatch must be greater than or equal to 0.");
+        }
         var stopwatch = Stopwatch.StartNew();
 
         var errors = new List<BatchError>();
@@ -459,6 +474,159 @@ public static class BatchProcessor
         stopwatch.Stop();
 
         return new BatchResult(counters[0], counters[1], stopwatch.Elapsed, errors);
+    }
+
+    /// <summary>
+    /// Processes items from an async stream in batches with per-item error tracking.
+    /// Returns a <see cref="BatchResult{T}"/> containing individual results for every streamed item.
+    /// </summary>
+    /// <typeparam name="T">The type of items to process.</typeparam>
+    /// <param name="source">The async enumerable source of items to process.</param>
+    /// <param name="batchSize">The number of items per batch. Must be greater than zero.</param>
+    /// <param name="processor">An async function that processes a batch of items.</param>
+    /// <param name="options">Optional configuration for parallelism, progress, and error handling.</param>
+    /// <param name="cancellationToken">Optional cancellation token to cancel the entire processing pipeline.</param>
+    /// <returns>A <see cref="BatchResult{T}"/> with per-item results and summary counts.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="processor"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize"/> is less than 1.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is cancelled.</exception>
+    public static async Task<BatchResult<T>> ProcessStreamWithItemsAsync<T>(
+        IAsyncEnumerable<T> source,
+        int batchSize,
+        Func<IReadOnlyList<T>, Task> processor,
+        BatchOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(processor);
+
+        if (batchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be at least 1.");
+        }
+
+        options ??= new BatchOptions();
+
+        if (options.ResumeFromBatch < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.ResumeFromBatch, "ResumeFromBatch must be greater than or equal to 0.");
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var errors = new List<BatchError>();
+        var allItemResults = new List<BatchItemResult<T>>();
+        var batchIndex = 0;
+        var lockObj = new object();
+        var aborted = false;
+
+        var currentBatch = new List<T>(batchSize);
+
+        async Task RunBatchAsync(IReadOnlyList<T> batch, int currentIndex)
+        {
+            var batchStopwatch = Stopwatch.StartNew();
+            var batchSuccessCount = 0;
+            var batchFailureCount = 0;
+
+            try
+            {
+                await ProcessBatchWithRetry(batch, processor, options.RetryCount, options.BatchTimeout, cancellationToken)
+                    .ConfigureAwait(false);
+
+                batchSuccessCount = batch.Count;
+
+                lock (lockObj)
+                {
+                    foreach (var item in batch)
+                    {
+                        allItemResults.Add(new BatchItemResult<T>(item, true, null));
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                batchFailureCount = batch.Count;
+
+                lock (lockObj)
+                {
+                    errors.Add(new BatchError(currentIndex, ex));
+
+                    foreach (var item in batch)
+                    {
+                        allItemResults.Add(new BatchItemResult<T>(item, false, ex));
+                    }
+
+                    if (options.OnBatchError == BatchErrorHandling.Abort)
+                    {
+                        aborted = true;
+                    }
+                }
+            }
+            finally
+            {
+                batchStopwatch.Stop();
+
+                lock (lockObj)
+                {
+                    options.OnBatchCompleted?.Invoke(new BatchCompletedEventArgs(
+                        currentIndex,
+                        batch.Count,
+                        batchStopwatch.Elapsed,
+                        batchSuccessCount,
+                        batchFailureCount));
+
+                    options.CheckpointCallback?.Invoke(currentIndex);
+                }
+            }
+        }
+
+        await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            if (aborted)
+            {
+                break;
+            }
+
+            currentBatch.Add(item);
+
+            if (currentBatch.Count >= batchSize)
+            {
+                var batch = currentBatch.ToArray();
+                currentBatch = new List<T>(batchSize);
+                var currentIndex = batchIndex++;
+
+                if (currentIndex < options.ResumeFromBatch)
+                {
+                    continue;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                await RunBatchAsync(batch, currentIndex).ConfigureAwait(false);
+            }
+        }
+
+        if (currentBatch.Count > 0 && !aborted)
+        {
+            var batch = currentBatch.ToArray();
+            var currentIndex = batchIndex++;
+
+            if (currentIndex >= options.ResumeFromBatch)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await RunBatchAsync(batch, currentIndex).ConfigureAwait(false);
+            }
+        }
+
+        stopwatch.Stop();
+
+        var succeededCount = allItemResults.Count(r => r.Success);
+        var failedCount = allItemResults.Count(r => !r.Success);
+        var failures = allItemResults.Where(r => !r.Success).ToList();
+
+        return new BatchResult<T>(allItemResults, succeededCount, failedCount, failures, stopwatch.Elapsed, errors);
     }
 
     private static Task RunStreamBatch<T>(

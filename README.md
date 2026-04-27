@@ -186,6 +186,35 @@ var result = await BatchProcessor.Process(items, batchSize: 100, async batch =>
 });
 ```
 
+### Streaming with Per-Item Results
+
+When you need per-item failure tracking on a streamed source, use `ProcessStreamWithItemsAsync`:
+
+```csharp
+using Philiprehberger.BatchProcessor;
+
+async IAsyncEnumerable<Order> GetOrdersAsync()
+{
+    await foreach (var order in database.StreamOrdersAsync())
+    {
+        yield return order;
+    }
+}
+
+var result = await BatchProcessor.ProcessStreamWithItemsAsync(GetOrdersAsync(), batchSize: 50, async batch =>
+{
+    await SendToWarehouseAsync(batch);
+}, new BatchOptions
+{
+    OnBatchError = BatchErrorHandling.Skip
+});
+
+foreach (var failure in result.Failures)
+{
+    Console.WriteLine($"Order {failure.Item} failed: {failure.Exception?.Message}");
+}
+```
+
 ### Adaptive Batch Sizing
 
 Automatically adjust batch sizes based on measured throughput:
@@ -222,6 +251,7 @@ var result = await BatchProcessor.Process(items, batchSize: 50, async batch =>
 | `Process<T>(items, batchSize, processor, options?, cancellationToken?)` | Process items in batches asynchronously. Returns a `BatchResult`. |
 | `ProcessAsync<T>(items, batchSize, processor, options?, cancellationToken?)` | Process items in batches with per-item error tracking. Returns a `BatchResult<T>`. |
 | `ProcessStreamAsync<T>(source, batchSize, processor, options?, cancellationToken?)` | Process items from an `IAsyncEnumerable<T>` source in batches. Returns a `BatchResult`. |
+| `ProcessStreamWithItemsAsync<T>(source, batchSize, processor, options?, cancellationToken?)` | Process items from an `IAsyncEnumerable<T>` source with per-item error tracking. Returns a `BatchResult<T>`. |
 
 ### BatchOptions
 

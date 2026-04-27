@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-04-27)
+
+- Add `ProcessStreamWithItemsAsync` method that streams from `IAsyncEnumerable<T>` and returns a `BatchResult<T>` with per-item results
+- Validate `ResumeFromBatch` is non-negative across all `Process*` methods (throws `ArgumentOutOfRangeException`)
+- Align CI workflow with the standardized template (`CI + Publish` name, pinned `actions/checkout@v5`, no `--skip-duplicate`)
+
 ## 0.3.0 (2026-03-31)
 
 - Add `ProcessStreamAsync` method for processing `IAsyncEnumerable<T>` sources without materializing the full collection
